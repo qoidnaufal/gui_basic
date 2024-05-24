@@ -7,10 +7,11 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+atomic = "0.6.0"
 env_logger = "0.11.3"
 ffmpeg-the-third = "2.0.1"
-futures = { version = "0.3.30", features = ["executor", "thread-pool"] }
+futures = "0.3.30"
+log = "0.4.21"
 rfd = "0.14.1"
-tokio = { version = "1.37.0", features = ["rt-multi-thread", "macros"] }
 wgpu = "0.20.0"
 winit = "0.30.0"
