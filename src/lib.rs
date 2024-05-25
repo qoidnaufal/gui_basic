@@ -14,21 +14,27 @@ use winit::{
     window::{Window, WindowId},
 };
 
-// --- counter-clockwise ordered: top - bottom left - bottom right
+// --- counter-clockwise ordered
 pub const VERTICES: &[Vertex] = &[
     Vertex {
-        position: [0.0, 0.5, 0.0],
-        color: [1.0, 0.0, 0.0],
+        position: [-0.7, 0.7, 0.0],
+        tex_coords: [0.0, 0.0],
     },
     Vertex {
-        position: [-0.5, -0.5, 0.0],
-        color: [0.0, 1.0, 0.0],
+        position: [-0.7, -0.7, 0.0],
+        tex_coords: [0.0, 1.0],
     },
     Vertex {
-        position: [0.5, -0.5, 0.0],
-        color: [0.0, 0.0, 1.0],
+        position: [0.7, -0.7, 0.0],
+        tex_coords: [1.0, 1.0],
+    },
+    Vertex {
+        position: [0.7, 0.7, 0.0],
+        tex_coords: [1.0, 0.0],
     },
 ];
+
+pub const INDICES: &[u16] = &[0, 1, 2, 2, 3, 0];
 
 #[derive(Debug)]
 pub struct App<'a> {
@@ -96,6 +102,9 @@ impl<'a> ApplicationHandler for App<'a> {
                     KeyCode::KeyO => {
                         let _video_file = video::VideoFile::open_file();
                         // video_file.decode_file()?;
+                    }
+                    KeyCode::KeyI => {
+                        self.window_state.open_image();
                     }
                     _ => {
                         log::info!("pressed key: {:?}", key)
