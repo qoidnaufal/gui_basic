@@ -1,8 +1,11 @@
-pub mod video;
-pub mod video_player;
+pub mod media;
+pub mod vertex_buffer;
+pub mod video_pipeline;
 pub mod window_state;
 
-// use ffmpeg_the_third as ffmpeg;
+use media::video;
+use vertex_buffer::Vertex;
+
 use winit::{
     application::ApplicationHandler,
     event::{self, WindowEvent},
@@ -10,6 +13,22 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
+
+// --- counter-clockwise ordered: top - bottom left - bottom right
+pub const VERTICES: &[Vertex] = &[
+    Vertex {
+        position: [0.0, 0.5, 0.0],
+        color: [1.0, 0.0, 0.0],
+    },
+    Vertex {
+        position: [-0.5, -0.5, 0.0],
+        color: [0.0, 1.0, 0.0],
+    },
+    Vertex {
+        position: [0.5, -0.5, 0.0],
+        color: [0.0, 0.0, 1.0],
+    },
+];
 
 #[derive(Debug)]
 pub struct App<'a> {
