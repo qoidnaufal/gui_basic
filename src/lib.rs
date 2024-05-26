@@ -70,8 +70,10 @@ impl<'a> ApplicationHandler for App<'a> {
             .unwrap();
 
         self.window_state.window = Some(window);
-        let image = std::fs::read("../../../Downloads/1352909.jpeg").unwrap();
-        self.window_state.image_data = image;
+
+        // let image = std::fs::read("../../../Downloads/1352909.jpeg").unwrap();
+        // self.window_state.image_data = image;
+
         self.window_state.init();
     }
 

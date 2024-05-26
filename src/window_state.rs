@@ -108,7 +108,6 @@ impl<'a> WindowState<'a> {
 
         surface.configure(&device, &config);
 
-        // --- how to make this loaded on file pick?
         // let image = std::fs::read("../../../Downloads/1352909.jpeg").unwrap();
         // self.image_data = image;
 

@@ -15,18 +15,30 @@ impl Texture {
         bytes: &[u8],
         label: &str,
     ) -> anyhow::Result<Self> {
-        let img = image::load_from_memory(bytes)?;
-        Self::from_image(device, queue, &img, Some(label))
+        let (rgba, dimensions) = if bytes.len() > 0 {
+            let img = image::load_from_memory(bytes)?;
+            let rgba = img.to_rgba8();
+            let dimensions = img.dimensions();
+            (rgba, dimensions)
+        } else {
+            let rgba: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> = image::ImageBuffer::from_vec(1, 1, vec![0, 0, 0, 1]).unwrap();
+            let dimensions: (u32, u32) = (1, 1);
+            (rgba, dimensions)
+        };
+        
+        Self::from_image(device, queue, rgba, dimensions, Some(label))
     }
 
     pub fn from_image(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        img: &image::DynamicImage,
+        // img: &image::DynamicImage,
+        rgba: image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
+        dimensions: (u32, u32),
         label: Option<&str>,
     ) -> anyhow::Result<Self> {
-        let rgba = img.to_rgba8();
-        let dimensions = img.dimensions();
+        // let rgba = img.to_rgba8();
+        // let dimensions = img.dimensions();
 
         let size = wgpu::Extent3d {
             width: dimensions.0,
