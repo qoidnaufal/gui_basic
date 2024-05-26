@@ -1,4 +1,5 @@
 pub mod media;
+pub mod texture;
 pub mod vertex_buffer;
 pub mod video_pipeline;
 pub mod window_state;
@@ -14,27 +15,35 @@ use winit::{
     window::{Window, WindowId},
 };
 
-// --- counter-clockwise ordered
-pub const VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [-0.7, 0.7, 0.0],
-        tex_coords: [0.0, 0.0],
-    },
-    Vertex {
-        position: [-0.7, -0.7, 0.0],
-        tex_coords: [0.0, 1.0],
-    },
-    Vertex {
-        position: [0.7, -0.7, 0.0],
-        tex_coords: [1.0, 1.0],
-    },
-    Vertex {
-        position: [0.7, 0.7, 0.0],
-        tex_coords: [1.0, 0.0],
-    },
+// --- positions are counter-clockwise ordered
+// --- tex_coords works like this:
+//    (0)------------------(3) --> index
+//     | [0, 0]      [1, 0] |
+//     |                |   |
+//     |                `--------> tex_coords
+//     |                    |
+//     |                    |
+//     |       (0, 0) -----------> center position
+//     |                    |
+//     |                    |
+//     |                    |
+//     |                    |
+//     | [0, 1]      [1, 1] |
+//    (1)------------------(2)
+
+#[rustfmt::skip]
+pub const RECT_VERTICES: &[Vertex] = &[
+    Vertex { position: [-0.7, 0.7, 0.0], tex_coords: [0.0, 0.0] },
+    Vertex { position: [-0.7, -0.7, 0.0], tex_coords: [0.0, 1.0] },
+    Vertex { position: [0.7, -0.7, 0.0], tex_coords: [1.0, 1.0] },
+    Vertex { position: [0.7, 0.7, 0.0], tex_coords: [1.0, 0.0] },
 ];
 
-pub const INDICES: &[u16] = &[0, 1, 2, 2, 3, 0];
+#[rustfmt::skip]
+pub const RECT_INDICES: &[u16] = &[
+    0, 1, 2,
+    2, 3, 0
+];
 
 #[derive(Debug)]
 pub struct App<'a> {
@@ -61,6 +70,8 @@ impl<'a> ApplicationHandler for App<'a> {
             .unwrap();
 
         self.window_state.window = Some(window);
+        let image = std::fs::read("../../../Downloads/1352909.jpeg").unwrap();
+        self.window_state.image_data = image;
         self.window_state.init();
     }
 
@@ -105,6 +116,9 @@ impl<'a> ApplicationHandler for App<'a> {
                     }
                     KeyCode::KeyI => {
                         self.window_state.open_image();
+                        // --- this method works but too expensive
+                        self.window_state.init();
+                        self.window_state.window.as_ref().unwrap().request_redraw();
                     }
                     _ => {
                         log::info!("pressed key: {:?}", key)
