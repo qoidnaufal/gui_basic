@@ -113,8 +113,7 @@ impl<'a> ApplicationHandler for App<'a> {
             } => {
                 match key {
                     KeyCode::KeyO => {
-                        let _video_file = video::VideoFile::open_file();
-                        // video_file.decode_file()?;
+                        let _open_video = video::VideoStreamer::open_file().unwrap();
                     }
                     KeyCode::KeyI => {
                         self.window_state.open_image();

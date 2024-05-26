@@ -21,11 +21,12 @@ impl Texture {
             let dimensions = img.dimensions();
             (rgba, dimensions)
         } else {
-            let rgba: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> = image::ImageBuffer::from_vec(1, 1, vec![0, 0, 0, 1]).unwrap();
+            let rgba: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> =
+                image::ImageBuffer::from_vec(1, 1, vec![0, 0, 0, 1]).unwrap();
             let dimensions: (u32, u32) = (1, 1);
             (rgba, dimensions)
         };
-        
+
         Self::from_image(device, queue, rgba, dimensions, Some(label))
     }
 

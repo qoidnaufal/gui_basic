@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use wgpu::util::DeviceExt;
 use winit::window::Window;
 
@@ -8,22 +10,21 @@ use crate::{texture, vertex_buffer::Vertex};
 #[derive(Debug)]
 pub struct WindowState<'a> {
     pub bg_color: &'a [f64; 4],
-    pub surface: Option<wgpu::Surface<'a>>,
-    pub device: Option<wgpu::Device>,
-    pub queue: Option<wgpu::Queue>,
-    pub config: Option<wgpu::SurfaceConfiguration>,
-    pub size: Option<winit::dpi::PhysicalSize<u32>>,
-    pub render_pipeline: Option<wgpu::RenderPipeline>,
     pub window: Option<Window>,
-    // --- the shapes
-    pub vertex_buffer: Option<wgpu::Buffer>,
-    pub index_buffer: Option<wgpu::Buffer>,
-    pub num_indices: u32,
+    pub size: Option<winit::dpi::PhysicalSize<u32>>,
+    surface: Option<wgpu::Surface<'a>>,
+    device: Option<wgpu::Device>,
+    queue: Option<wgpu::Queue>,
+    config: Option<wgpu::SurfaceConfiguration>,
+    render_pipeline: Option<wgpu::RenderPipeline>,
+    // --- vertex shader
+    vertex_buffer: Option<wgpu::Buffer>,
+    index_buffer: Option<wgpu::Buffer>,
+    num_indices: u32,
     // --- loaded image
-    pub image_data: Vec<u8>,
-    pub diffuse_bind_group: Option<wgpu::BindGroup>,
-    pub diffuse_texture: Option<texture::Texture>,
-    pub image_changed: bool,
+    image_data: Vec<u8>,
+    image_bind_group: Option<wgpu::BindGroup>,
+    image_texture: Option<texture::Texture>,
 }
 
 impl<'a> WindowState<'a> {
@@ -41,9 +42,8 @@ impl<'a> WindowState<'a> {
             index_buffer: None,
             num_indices: 0,
             image_data: Vec::new(),
-            diffuse_bind_group: None,
-            diffuse_texture: None,
-            image_changed: false,
+            image_bind_group: None,
+            image_texture: None,
         }
     }
 
@@ -111,10 +111,11 @@ impl<'a> WindowState<'a> {
         // let image = std::fs::read("../../../Downloads/1352909.jpeg").unwrap();
         // self.image_data = image;
 
-        let diffuse_bytes = self.image_data.as_slice();
-        let diffuse_texture =
-            texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "Image").unwrap();
+        let image_bytes = self.image_data.as_slice();
+        let image_texture =
+            texture::Texture::from_bytes(&device, &queue, image_bytes, "Image").unwrap();
 
+        // --- idk, maybe later this section needs to be separated?
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Texture Bind Group Layout"),
@@ -138,22 +139,21 @@ impl<'a> WindowState<'a> {
                 ],
             });
 
-        let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let image_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                    resource: wgpu::BindingResource::TextureView(&image_texture.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                    resource: wgpu::BindingResource::Sampler(&image_texture.sampler),
                 },
             ],
-            label: Some("Diffuse Bind Group"),
+            label: Some("image Bind Group"),
         });
 
-        // --- idk, maybe later this section needs to be separated?
         let shader = device.create_shader_module(wgpu::include_wgsl!("../shader/shader.wgsl"));
 
         let render_pipeline_layout =
@@ -224,8 +224,8 @@ impl<'a> WindowState<'a> {
         self.vertex_buffer = Some(vertex_buffer);
         self.index_buffer = Some(index_buffer);
         self.num_indices = RECT_INDICES.len() as u32;
-        self.diffuse_bind_group = Some(diffuse_bind_group);
-        self.diffuse_texture = Some(diffuse_texture);
+        self.image_bind_group = Some(image_bind_group);
+        self.image_texture = Some(image_texture);
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -282,7 +282,7 @@ impl<'a> WindowState<'a> {
             });
 
             render_pass.set_pipeline(self.render_pipeline.as_ref().unwrap());
-            render_pass.set_bind_group(0, self.diffuse_bind_group.as_ref().unwrap(), &[]);
+            render_pass.set_bind_group(0, self.image_bind_group.as_ref().unwrap(), &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.as_ref().unwrap().slice(..));
             render_pass.set_index_buffer(
                 self.index_buffer.as_ref().unwrap().slice(..),
@@ -303,9 +303,11 @@ impl<'a> WindowState<'a> {
 
     pub fn open_image(&mut self) {
         let maybe_pick = rfd::FileDialog::new().pick_file();
-        if let Some(file) = maybe_pick {
-            let image = std::fs::read(file).unwrap();
-            self.image_data = image;
+        if let Some(path) = maybe_pick {
+            let mut buffer: Vec<u8> = vec![];
+            let mut file = std::fs::File::open(path).unwrap();
+            file.read_to_end(&mut buffer).unwrap();
+            self.image_data = buffer;
         }
     }
 }

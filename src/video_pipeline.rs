@@ -7,21 +7,21 @@ pub struct Uniforms {
 
 pub struct VideoPipeline {
     pub pipeline: wgpu::RenderPipeline,
-    pub bg0_layout: wgpu::BindGroupLayout,
+    pub bind_group_layout: wgpu::BindGroupLayout,
     pub sampler: wgpu::Sampler,
     pub texture: BTreeMap<usize, (wgpu::Texture, wgpu::Buffer, wgpu::BindGroup)>,
 }
 
 impl VideoPipeline {
-    // --- format should use config.format
+    // --- format should use config.format?
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let video_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Video Player Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("../shader/video_shader.wgsl").into()),
         });
 
-        let bg0_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Video Player BindGroup 0 Layout"),
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Video Player Bind Group Layout"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -52,9 +52,11 @@ impl VideoPipeline {
             ],
         });
 
+        // --- bind_group is not defined here, but on the fn prepare()
+
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Video Player Layout"),
-            bind_group_layouts: &[&bg0_layout],
+            bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -65,7 +67,7 @@ impl VideoPipeline {
                 module: &video_shader,
                 entry_point: "vs_main",
                 compilation_options: Default::default(),
-                buffers: &[],
+                buffers: &[], // there's no VertexBufferLayout here?
             },
             fragment: Some(wgpu::FragmentState {
                 module: &video_shader,
@@ -73,7 +75,7 @@ impl VideoPipeline {
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
-                    blend: None,
+                    blend: None, // there's no BlendState here
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -104,7 +106,7 @@ impl VideoPipeline {
 
         Self {
             pipeline,
-            bg0_layout,
+            bind_group_layout,
             sampler,
             texture: BTreeMap::new(),
         }
@@ -156,7 +158,7 @@ impl VideoPipeline {
 
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Video Player Bind Group"),
-                layout: &self.bg0_layout,
+                layout: &self.bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
