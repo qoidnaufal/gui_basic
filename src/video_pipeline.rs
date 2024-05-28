@@ -1,10 +1,13 @@
 use std::collections::BTreeMap;
 
+use crate::VID_UNIFORMS;
+
 #[repr(C)]
 pub struct Uniforms {
-    rect: [f32; 4],
+    pub rect: [f32; 4],
 }
 
+#[derive(Debug)]
 pub struct VideoPipeline {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_group_layout: wgpu::BindGroupLayout,
@@ -203,5 +206,54 @@ impl VideoPipeline {
                 depth_or_array_layers: 1,
             },
         );
+    }
+
+    pub fn prepare(&mut self, queue: &wgpu::Queue, video_id: usize) {
+        if let Some((_, buffer, _)) = self.texture.get(&video_id) {
+            let uniforms = VID_UNIFORMS;
+
+            queue.write_buffer(buffer, 0, unsafe {
+                std::slice::from_raw_parts(
+                    &uniforms as *const _ as *const u8,
+                    std::mem::size_of::<Uniforms>(),
+                )
+            });
+        }
+    }
+
+    pub fn render(
+        &self,
+        view: &wgpu::TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+        video_id: usize,
+    ) {
+        if let Some((_, _, bind_group)) = self.texture.get(&video_id) {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Video Player Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&self.pipeline);
+            render_pass.set_bind_group(0, bind_group, &[]);
+            render_pass.set_viewport(
+                VID_UNIFORMS.rect[0],
+                VID_UNIFORMS.rect[1],
+                VID_UNIFORMS.rect[2],
+                VID_UNIFORMS.rect[3],
+                0.0,
+                1.0,
+            );
+            render_pass.draw(0..4, 0..1);
+        }
     }
 }

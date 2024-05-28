@@ -4,7 +4,7 @@ pub mod vertex_buffer;
 pub mod video_pipeline;
 pub mod window_state;
 
-use media::video;
+// use media::video;
 use vertex_buffer::Vertex;
 
 use winit::{
@@ -14,6 +14,11 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
+
+#[repr(C)]
+pub struct Uniforms {
+    pub rect: [f32; 4],
+}
 
 // --- positions are counter-clockwise ordered
 // --- tex_coords works like this:
@@ -45,6 +50,11 @@ pub const RECT_INDICES: &[u16] = &[
     2, 3, 0
 ];
 
+#[rustfmt::skip]
+pub const VID_UNIFORMS: Uniforms = Uniforms {
+    rect: [0.0, 0.0, 0.7, 0.7]
+};
+
 #[derive(Debug)]
 pub struct App<'a> {
     pub window_state: window_state::WindowState<'a>,
@@ -70,9 +80,6 @@ impl<'a> ApplicationHandler for App<'a> {
             .unwrap();
 
         self.window_state.window = Some(window);
-
-        // let image = std::fs::read("../../../Downloads/1352909.jpeg").unwrap();
-        // self.window_state.image_data = image;
 
         self.window_state.init();
     }
@@ -102,6 +109,7 @@ impl<'a> ApplicationHandler for App<'a> {
                 let new_size = winit::dpi::PhysicalSize::new(new_width, new_height);
                 self.window_state.resize(new_size);
             }
+            // ------------------------------------------------
             WindowEvent::KeyboardInput {
                 event:
                     event::KeyEvent {
@@ -110,22 +118,22 @@ impl<'a> ApplicationHandler for App<'a> {
                         ..
                     },
                 ..
-            } => {
-                match key {
-                    KeyCode::KeyO => {
-                        let _open_video = video::VideoStreamer::open_file().unwrap();
-                    }
-                    KeyCode::KeyI => {
-                        self.window_state.open_image();
-                        // --- this method works but too expensive
+            } => match key {
+                KeyCode::KeyO => {
+                    if let Ok(Some(_)) = self.window_state.open_video() {
                         self.window_state.init();
                         self.window_state.window.as_ref().unwrap().request_redraw();
                     }
-                    _ => {
-                        log::info!("pressed key: {:?}", key)
-                    }
                 }
-            }
+                KeyCode::ArrowRight => {
+                    self.window_state.video_index += 1;
+                    self.window_state.init();
+                    self.window_state.window.as_ref().unwrap().request_redraw();
+                }
+                _ => {
+                    log::info!("pressed key: {:?}", key)
+                }
+            },
             _ => (),
             // n => log::info!("{:?}", n),
         }

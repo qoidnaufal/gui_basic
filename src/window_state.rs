@@ -1,5 +1,6 @@
-use std::io::Read;
+use std::collections::BTreeMap;
 
+use ffmpeg_the_third as ffmpeg;
 use wgpu::util::DeviceExt;
 use winit::window::Window;
 
@@ -8,10 +9,18 @@ use super::{RECT_INDICES, RECT_VERTICES};
 use crate::{texture, vertex_buffer::Vertex};
 
 #[derive(Debug)]
+pub struct VideoStreamData {
+    pub video_id: usize,
+    pub dimensions: (u32, u32),
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug)]
 pub struct WindowState<'a> {
     pub bg_color: &'a [f64; 4],
     pub window: Option<Window>,
     pub size: Option<winit::dpi::PhysicalSize<u32>>,
+    // --- surface
     surface: Option<wgpu::Surface<'a>>,
     device: Option<wgpu::Device>,
     queue: Option<wgpu::Queue>,
@@ -21,10 +30,13 @@ pub struct WindowState<'a> {
     vertex_buffer: Option<wgpu::Buffer>,
     index_buffer: Option<wgpu::Buffer>,
     num_indices: u32,
-    // --- loaded image
-    image_data: Vec<u8>,
-    image_bind_group: Option<wgpu::BindGroup>,
-    image_texture: Option<texture::Texture>,
+    // uniform_buffer: Option<wgpu::Buffer>,
+    // --- image
+    media_bind_group: Option<wgpu::BindGroup>,
+    texture: Option<texture::Texture>,
+    // --- video
+    pub video_data: BTreeMap<usize, VideoStreamData>,
+    pub video_index: usize,
 }
 
 impl<'a> WindowState<'a> {
@@ -41,9 +53,11 @@ impl<'a> WindowState<'a> {
             vertex_buffer: None,
             index_buffer: None,
             num_indices: 0,
-            image_data: Vec::new(),
-            image_bind_group: None,
-            image_texture: None,
+            // uniform_buffer: None,
+            media_bind_group: None,
+            texture: None,
+            video_data: BTreeMap::new(),
+            video_index: 0,
         }
     }
 
@@ -108,14 +122,27 @@ impl<'a> WindowState<'a> {
 
         surface.configure(&device, &config);
 
-        // let image = std::fs::read("../../../Downloads/1352909.jpeg").unwrap();
-        // self.image_data = image;
+        // ------------------------------------------
 
-        let image_bytes = self.image_data.as_slice();
-        let image_texture =
-            texture::Texture::from_bytes(&device, &queue, image_bytes, "Image").unwrap();
+        // let video_pipeline = video_pipeline::VideoPipeline::new(&device, config.format);
+        // self.video_pipeline = Some(video_pipeline);
 
-        // --- idk, maybe later this section needs to be separated?
+        let texture =
+            texture::Texture::from_bytes(&device, &queue, &self.video_data, self.video_index)
+                .unwrap();
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(RECT_VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(RECT_INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Texture Bind Group Layout"),
@@ -136,20 +163,39 @@ impl<'a> WindowState<'a> {
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
+                    // ---  new here, correspond with new shader
+                    // wgpu::BindGroupLayoutEntry {
+                    //     binding: 2,
+                    //     visibility: wgpu::ShaderStages::VERTEX,
+                    //     ty: wgpu::BindingType::Buffer {
+                    //         ty: wgpu::BufferBindingType::Uniform,
+                    //         has_dynamic_offset: false,
+                    //         min_binding_size: None,
+                    //     },
+                    //     count: None,
+                    // },
                 ],
             });
 
-        let image_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let media_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&image_texture.view),
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&image_texture.sampler),
+                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
                 },
+                // wgpu::BindGroupEntry {
+                //     binding: 2,
+                //     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                //         buffer: &uniform_buffer,
+                //         offset: 0,
+                //         size: None,
+                //     }),
+                // },
             ],
             label: Some("image Bind Group"),
         });
@@ -178,19 +224,11 @@ impl<'a> WindowState<'a> {
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
+                    blend: None, // None
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
+            primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample: wgpu::MultisampleState {
                 count: 1,
@@ -198,18 +236,6 @@ impl<'a> WindowState<'a> {
                 alpha_to_coverage_enabled: false,
             },
             multiview: None,
-        });
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(RECT_VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(RECT_INDICES),
-            usage: wgpu::BufferUsages::INDEX,
         });
 
         self.bg_color = bg_color;
@@ -224,8 +250,10 @@ impl<'a> WindowState<'a> {
         self.vertex_buffer = Some(vertex_buffer);
         self.index_buffer = Some(index_buffer);
         self.num_indices = RECT_INDICES.len() as u32;
-        self.image_bind_group = Some(image_bind_group);
-        self.image_texture = Some(image_texture);
+        self.media_bind_group = Some(media_bind_group);
+        self.texture = Some(texture);
+
+        // self.uniform_buffer = Some(uniform_buffer);
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -282,7 +310,8 @@ impl<'a> WindowState<'a> {
             });
 
             render_pass.set_pipeline(self.render_pipeline.as_ref().unwrap());
-            render_pass.set_bind_group(0, self.image_bind_group.as_ref().unwrap(), &[]);
+            render_pass.set_bind_group(0, self.media_bind_group.as_ref().unwrap(), &[]);
+
             render_pass.set_vertex_buffer(0, self.vertex_buffer.as_ref().unwrap().slice(..));
             render_pass.set_index_buffer(
                 self.index_buffer.as_ref().unwrap().slice(..),
@@ -301,13 +330,73 @@ impl<'a> WindowState<'a> {
         Ok(())
     }
 
-    pub fn open_image(&mut self) {
-        let maybe_pick = rfd::FileDialog::new().pick_file();
-        if let Some(path) = maybe_pick {
-            let mut buffer: Vec<u8> = vec![];
-            let mut file = std::fs::File::open(path).unwrap();
-            file.read_to_end(&mut buffer).unwrap();
-            self.image_data = buffer;
+    pub fn open_video(&mut self) -> Result<Option<()>, ffmpeg::Error> {
+        let maybe_path = rfd::FileDialog::new().pick_file();
+
+        if let Some(path) = maybe_path {
+            ffmpeg::init().unwrap();
+            log::info!("{:?}", path);
+
+            // --- read the file from the path
+            let mut input = ffmpeg::format::input(&path)?;
+            let video_stream = input
+                .streams()
+                .best(ffmpeg::util::media::Type::Video)
+                .ok_or(ffmpeg::Error::StreamNotFound)?;
+
+            let video_stream_index = video_stream.index();
+
+            let decoder_context =
+                ffmpeg::codec::Context::from_parameters(video_stream.parameters())?;
+            // --- ffmpeg::codec::decoder::video::Video
+            let mut packet_decoder = decoder_context.decoder().video()?;
+
+            let mut scaler = ffmpeg::software::scaling::Context::get(
+                packet_decoder.format(),
+                packet_decoder.width(),
+                packet_decoder.height(),
+                ffmpeg::format::Pixel::RGBA,
+                packet_decoder.width(),
+                packet_decoder.height(),
+                ffmpeg::software::scaling::Flags::BILINEAR,
+            )?;
+
+            let mut frame_idx = 0usize;
+
+            let mut receive_decoded_frame = |p_dec: &mut ffmpeg::codec::decoder::video::Video| {
+                let mut decoded = ffmpeg::util::frame::Video::empty();
+                if p_dec.receive_frame(&mut decoded).is_ok() {
+                    let mut rgba_frame = ffmpeg::util::frame::Video::empty();
+                    scaler.run(&decoded, &mut rgba_frame)?;
+
+                    self.video_data.insert(
+                        frame_idx,
+                        VideoStreamData {
+                            video_id: frame_idx,
+                            dimensions: (rgba_frame.width(), rgba_frame.height()),
+                            data: rgba_frame.data(0).to_vec(),
+                        },
+                    );
+
+                    frame_idx += 1;
+                }
+
+                Ok::<(), ffmpeg::Error>(())
+            };
+
+            while let Some(Ok((stream, packet))) = input.packets().next() {
+                if stream.index() == video_stream_index {
+                    packet_decoder.send_packet(&packet)?;
+                    receive_decoded_frame(&mut packet_decoder)?;
+                }
+            }
+
+            packet_decoder.send_eof()?;
+            receive_decoded_frame(&mut packet_decoder)?;
+
+            Ok(Some(()))
+        } else {
+            Ok(None)
         }
     }
 }

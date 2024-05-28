@@ -4,7 +4,8 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 use gui_basic::App;
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let event_loop = EventLoop::new()?;

@@ -6,16 +6,18 @@ use ffmpeg_the_third as ffmpeg;
 //     Exit,
 // }
 
-#[derive(Default)]
-pub struct VideoStreamer {
+#[derive(Debug)]
+pub struct VideoStreamer<'a> {
     pub size: (u32, u32),
     // instead of binding the frame like this,
-    // i think i should just feed this to the pipeline?
-    pub frame: Vec<u8>,
+    // maybe it's better to pass the decoder?
+    pub frame: &'a [u8],
+    pub frame_idx: usize,
+    // pub video_decoder: ffmpeg::codec::decoder::video::Video,
 }
 
-impl VideoStreamer {
-    pub fn open_file() -> Result<Option<Self>, ffmpeg::Error> {
+impl<'a> VideoStreamer<'a> {
+    pub fn open_file() -> Result<(), ffmpeg::Error> {
         let maybe_path = rfd::FileDialog::new().pick_file();
 
         if let Some(path) = maybe_path {
@@ -53,7 +55,7 @@ impl VideoStreamer {
 
             let mut receive_decoded_frame = |p_dec: &mut ffmpeg::codec::decoder::video::Video| {
                 let mut decoded = ffmpeg::util::frame::Video::empty();
-                while p_dec.receive_frame(&mut decoded).is_ok() {
+                if p_dec.receive_frame(&mut decoded).is_ok() {
                     scaler.run(&decoded, &mut rgb_frame)?;
                     // --- a function here to process the frame and idx
 
@@ -73,16 +75,14 @@ impl VideoStreamer {
             packet_decoder.send_eof()?;
             receive_decoded_frame(&mut packet_decoder)?;
 
-            let size = (rgb_frame.width(), rgb_frame.height());
-            let frame = rgb_frame.data(0).to_vec();
+            // let size = (rgb_frame.width(), rgb_frame.height());
+            // let frame = rgb_frame.data(0).to_vec();
 
-            let video = Some(Self { size, frame });
+            // let video = Some(Self { size, frame });
 
-            Ok(video)
+            Ok(())
         } else {
-            Ok(None)
+            Ok(())
         }
     }
-
-    fn _video_frame_to_image(&self) {}
 }
