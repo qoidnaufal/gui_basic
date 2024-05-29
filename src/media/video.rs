@@ -5,12 +5,6 @@ use std::{
 
 use ffmpeg_the_third as ffmpeg;
 
-// enum LoopState {
-//     Running,
-//     Sleep(u64),
-//     Exit,
-// }
-
 pub struct VideoStreamData {
     pub video_index: usize,
     pub data: Arc<Mutex<BTreeMap<usize, ffmpeg::util::frame::Video>>>,

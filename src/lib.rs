@@ -2,7 +2,6 @@ pub mod buffer;
 pub mod media;
 pub mod texture;
 pub mod vertex_buffer;
-pub mod video_pipeline;
 pub mod window_state;
 
 use media::video;
@@ -23,7 +22,8 @@ pub struct Uniforms {
 }
 
 // --- positions are counter-clockwise ordered
-// --- tex_coords works like this:
+// --- position & tex_coords works like this:
+//
 //    (0)------------------(3) --> index
 //     | [0, 0]      [1, 0] |
 //     |                |   |

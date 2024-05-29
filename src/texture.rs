@@ -4,7 +4,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-// --- later change this into video texture i guess?
 #[derive(Debug)]
 pub struct Texture {
     pub texture: wgpu::Texture,
@@ -13,6 +12,7 @@ pub struct Texture {
 }
 
 impl Texture {
+    // --- lets try to use decoder directly here instead
     pub fn from_bytes(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
