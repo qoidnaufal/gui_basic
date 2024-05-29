@@ -1,9 +1,11 @@
+pub mod buffer;
 pub mod media;
 pub mod texture;
 pub mod vertex_buffer;
 pub mod video_pipeline;
 pub mod window_state;
 
+use media::video;
 // use media::video;
 use vertex_buffer::Vertex;
 
@@ -55,9 +57,9 @@ pub const VID_UNIFORMS: Uniforms = Uniforms {
     rect: [0.0, 0.0, 0.7, 0.7]
 };
 
-#[derive(Debug)]
 pub struct App<'a> {
     pub window_state: window_state::WindowState<'a>,
+    pub video_data: video::VideoStreamData,
 }
 
 impl<'a> App<'a> {
@@ -65,6 +67,7 @@ impl<'a> App<'a> {
     pub fn new() -> Self {
         Self {
             window_state: window_state::WindowState::new(),
+            video_data: video::VideoStreamData::new(),
         }
     }
 }
@@ -80,8 +83,8 @@ impl<'a> ApplicationHandler for App<'a> {
             .unwrap();
 
         self.window_state.window = Some(window);
-
-        self.window_state.init();
+        let bg_color = &[0.824, 0.902, 0.698, 1.0];
+        self.window_state.init(bg_color);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -90,7 +93,7 @@ impl<'a> ApplicationHandler for App<'a> {
                 log::info!("Close button was pressed, stopping...");
                 event_loop.exit();
             }
-            WindowEvent::RedrawRequested => match self.window_state.render() {
+            WindowEvent::RedrawRequested => match self.window_state.render(&self.video_data) {
                 Ok(_) => (),
                 Err(wgpu::SurfaceError::Lost) => {
                     self.window_state.resize(self.window_state.size.unwrap())
@@ -120,15 +123,24 @@ impl<'a> ApplicationHandler for App<'a> {
                 ..
             } => match key {
                 KeyCode::KeyO => {
-                    if let Ok(Some(_)) = self.window_state.open_video() {
-                        self.window_state.init();
+                    if let Ok(Some(_)) = self.video_data.open_video() {
+                        self.video_data.video_index = 0;
                         self.window_state.window.as_ref().unwrap().request_redraw();
                     }
                 }
                 KeyCode::ArrowRight => {
-                    self.window_state.video_index += 1;
-                    self.window_state.init();
-                    self.window_state.window.as_ref().unwrap().request_redraw();
+                    self.video_data.video_index += 1;
+                    if self
+                        .video_data
+                        .data
+                        .lock()
+                        .unwrap()
+                        .contains_key(&self.video_data.video_index)
+                    {
+                        self.window_state.window.as_ref().unwrap().request_redraw();
+                    } else {
+                        log::info!("Reached end...")
+                    }
                 }
                 _ => {
                     log::info!("pressed key: {:?}", key)

@@ -1,6 +1,8 @@
-use std::collections::BTreeMap;
-
-use crate::window_state::VideoStreamData;
+use ffmpeg_the_third as ffmpeg;
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
 
 // --- later change this into video texture i guess?
 #[derive(Debug)]
@@ -14,13 +16,13 @@ impl Texture {
     pub fn from_bytes(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        video_data: &BTreeMap<usize, VideoStreamData>,
+        video_data: Arc<Mutex<BTreeMap<usize, ffmpeg::util::frame::Video>>>,
         video_index: usize,
     ) -> anyhow::Result<Self> {
+        let video_data = video_data.lock().unwrap();
         let (dimensions, rgba) = if let Some(data) = video_data.get(&video_index) {
-            log::info!("received data");
-            let dimensions = data.dimensions;
-            let rgba = data.data.as_slice();
+            let dimensions = (data.width(), data.height());
+            let rgba = data.data(0);
             (dimensions, rgba)
         } else {
             let dimensions = (1u32, 1u32);
