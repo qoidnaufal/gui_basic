@@ -1,22 +1,20 @@
 use winit::window::Window;
 
-use crate::{buffer, media::video, texture, vertex_buffer::Vertex};
+use crate::media::media_player;
 
 pub struct WindowState<'a> {
     pub bg_color: &'a [f64; 4],
     pub window: Option<Window>,
     pub size: Option<winit::dpi::PhysicalSize<u32>>,
     // --- surface
-    surface: Option<wgpu::Surface<'a>>,
-    device: Option<wgpu::Device>,
-    queue: Option<wgpu::Queue>,
-    config: Option<wgpu::SurfaceConfiguration>,
-    // --- vertex buffer
-    buffer: Option<buffer::Buffer>,
+    pub surface: Option<wgpu::Surface<'a>>,
+    pub device: Option<wgpu::Device>,
+    pub queue: Option<wgpu::Queue>,
+    pub config: Option<wgpu::SurfaceConfiguration>,
 }
 
-impl<'a> WindowState<'a> {
-    pub fn new() -> Self {
+impl Default for WindowState<'_> {
+    fn default() -> Self {
         Self {
             bg_color: &[0.0, 0.0, 0.0, 1.0],
             surface: None,
@@ -25,10 +23,11 @@ impl<'a> WindowState<'a> {
             config: None,
             size: None,
             window: None,
-            buffer: None,
         }
     }
+}
 
+impl<'a> WindowState<'a> {
     pub fn init(&mut self, bg_color: &'a [f64; 4]) {
         let window = self.window.as_ref().unwrap();
 
@@ -65,8 +64,6 @@ impl<'a> WindowState<'a> {
 
             let surface_capabilities = surface.get_capabilities(&adapter);
 
-            // log::info!("surface capabilities: {:?}", surface_capabilities.formats);
-
             // surface_format: wgpu::TextureFormat
             let surface_format = surface_capabilities
                 .formats
@@ -93,11 +90,6 @@ impl<'a> WindowState<'a> {
 
         // ------------------------------------------
 
-        let buffer = buffer::Buffer::init(&device);
-        self.buffer = Some(buffer);
-
-        // ------------------------------------------
-
         self.bg_color = bg_color;
         self.device = Some(device);
         self.queue = Some(queue);
@@ -110,122 +102,37 @@ impl<'a> WindowState<'a> {
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size.replace(new_size);
-            self.config.as_mut().map(|c| {
+
+            if let Some(c) = self.config.as_mut() {
                 c.width = new_size.width;
                 c.height = new_size.height;
-            });
-            self.surface.as_mut().map(|s| {
+            };
+            if let Some(s) = self.surface.as_mut() {
                 s.configure(
                     &self.device.as_ref().unwrap(),
                     &self.config.as_ref().unwrap(),
                 )
-            });
-            self.window.as_ref().map(|w| w.request_redraw());
+            };
         }
     }
 
-    fn prepare(
+    // --- this function render the whole window
+    pub fn render_window(
         &mut self,
-        display_texture: texture::Texture,
-    ) -> (wgpu::RenderPipeline, wgpu::BindGroup) {
-        let device = self.device.as_ref().unwrap();
-        let config = self.config.as_ref().unwrap();
-
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Texture Bind Group Layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
-
-        let media_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&display_texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&display_texture.sampler),
-                },
-            ],
-            label: Some("image Bind Group"),
-        });
-
-        let shader = device.create_shader_module(wgpu::include_wgsl!("../shader/shader.wgsl"));
-
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&texture_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: "vs_main",
-                compilation_options: Default::default(),
-                buffers: &[Vertex::create_buffer_layout()],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: "fs_main",
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: None, // None
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-        });
-
-        (render_pipeline, media_bind_group)
-    }
-
-    pub fn render(
-        &mut self,
-        video_stream_data: &video::VideoStreamData,
+        media_player: &mut media_player::MediaPlayer,
     ) -> Result<(), wgpu::SurfaceError> {
-        // --- video data
-        let video_data = video_stream_data.data.clone();
+        if media_player.texture.as_ref().is_none() {
+            media_player
+                .create_texture(self.device.as_ref().unwrap(), self.queue.as_ref().unwrap())
+                .unwrap();
+        }
 
-        let display_texture = texture::Texture::from_bytes(
+        media_player.create_pipeline(
             self.device.as_ref().unwrap(),
-            self.queue.as_ref().unwrap(),
-            video_data,
-            video_stream_data.video_index,
-        )
-        .unwrap();
+            self.config.as_ref().unwrap().format,
+        );
 
-        let (render_pipeline, media_bind_group) = self.prepare(display_texture);
+        let pipeline = media_player.pipeline.as_ref().unwrap();
 
         // output: SurfaceTexture
         let output = self.surface.as_ref().unwrap().get_current_texture()?;
@@ -249,9 +156,9 @@ impl<'a> WindowState<'a> {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: self.bg_color[0], // 0.1
-                            g: self.bg_color[1], // 0.2
-                            b: self.bg_color[2], // 0.3
+                            r: self.bg_color[0],
+                            g: self.bg_color[1],
+                            b: self.bg_color[2],
                             a: self.bg_color[3],
                         }),
                         store: wgpu::StoreOp::Store,
@@ -262,15 +169,20 @@ impl<'a> WindowState<'a> {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&render_pipeline);
-            render_pass.set_bind_group(0, &media_bind_group, &[]);
-
-            render_pass.set_vertex_buffer(0, self.buffer.as_ref().unwrap().vertex_buffer.slice(..));
-            render_pass.set_index_buffer(
-                self.buffer.as_ref().unwrap().index_buffer.slice(..),
-                wgpu::IndexFormat::Uint16,
+            // ---- the loop needs to happen here _.
+            //                                     |
+            //                                     v
+            render_pass.set_pipeline(&pipeline.render_pipeline);
+            render_pass.set_bind_group(0, &pipeline.bind_group, &[]);
+            render_pass.set_viewport(
+                media_player.uniforms().rect[0],
+                media_player.uniforms().rect[1],
+                media_player.uniforms().rect[2],
+                media_player.uniforms().rect[3],
+                0.0,
+                1.0,
             );
-            render_pass.draw_indexed(0..self.buffer.as_ref().unwrap().num_indices, 0, 0..1);
+            render_pass.draw(0..4, 0..1);
         }
 
         self.queue

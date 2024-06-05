@@ -1,44 +1,30 @@
 use ffmpeg_the_third as ffmpeg;
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, Mutex},
-};
+
+use crate::uniforms;
 
 #[derive(Debug)]
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
+    pub buffer: wgpu::Buffer,
 }
 
 impl Texture {
-    // --- lets try to use decoder directly here instead
-    pub fn from_bytes(
+    pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        video_data: Arc<Mutex<BTreeMap<usize, ffmpeg::util::frame::Video>>>,
-        video_index: usize,
+        uniform: &uniforms::Uniforms,
+        data: Option<ffmpeg::util::frame::Video>,
     ) -> anyhow::Result<Self> {
-        let video_data = video_data.lock().unwrap();
-        let (dimensions, rgba) = if let Some(data) = video_data.get(&video_index) {
-            let dimensions = (data.width(), data.height());
-            let rgba = data.data(0);
-            (dimensions, rgba)
+        let (dimensions, rgba) = if let Some(v) = data {
+            ((v.width(), v.height()), v.data(0).to_vec())
         } else {
-            let dimensions = (1u32, 1u32);
-            let rgba: &[u8] = &[0, 0, 0, 1];
-            (dimensions, rgba)
+            let d = (1u32, 1u32);
+            let r = vec![0, 0, 0, 1];
+            (d, r)
         };
 
-        Self::into_image(device, queue, rgba, dimensions)
-    }
-
-    fn into_image(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        rgba: &[u8],
-        dimensions: (u32, u32),
-    ) -> anyhow::Result<Self> {
         let size = wgpu::Extent3d {
             width: dimensions.0,
             height: dimensions.1,
@@ -56,6 +42,12 @@ impl Texture {
             view_formats: &[],
         });
 
+        // -------
+
+        let buffer = uniforms::UniformBuffer::new(device).buffer;
+
+        queue.write_buffer(&buffer, 0, bytemuck::cast_slice(&[uniform.rect]));
+
         queue.write_texture(
             wgpu::ImageCopyTexture {
                 aspect: wgpu::TextureAspect::All,
@@ -63,7 +55,7 @@ impl Texture {
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
-            rgba,
+            &rgba,
             wgpu::ImageDataLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * dimensions.0),
@@ -72,7 +64,10 @@ impl Texture {
             size,
         );
 
+        // -------
+
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -87,6 +82,7 @@ impl Texture {
             texture,
             view,
             sampler,
+            buffer,
         })
     }
 }

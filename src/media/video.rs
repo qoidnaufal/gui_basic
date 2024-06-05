@@ -1,94 +1,61 @@
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, Mutex},
-};
+// use std::sync::{Arc, Mutex};
 
 use ffmpeg_the_third as ffmpeg;
 
-pub struct VideoStreamData {
-    pub video_index: usize,
-    pub data: Arc<Mutex<BTreeMap<usize, ffmpeg::util::frame::Video>>>,
+pub struct VideoStream {
+    pub video_stream_index: usize,
+    pub frame_rate: f64,
+    pub time_base: f64,
+    pub duration_ms: i64,
+    pub video_decoder: ffmpeg::codec::decoder::video::Video,
+    pub input_context: ffmpeg::format::context::input::Input,
 }
 
-impl VideoStreamData {
-    pub fn new() -> Self {
-        Self {
-            video_index: 0,
-            data: Arc::new(Mutex::new(BTreeMap::new())),
-        }
-    }
-    pub fn open_video(&self) -> Result<Option<()>, ffmpeg::Error> {
+impl VideoStream {
+    pub fn open_video() -> anyhow::Result<Option<Self>> {
         let maybe_path = rfd::FileDialog::new().pick_file();
 
-        let video_data = self.data.clone();
-
         if let Some(path) = maybe_path {
-            tokio::spawn(async move {
-                ffmpeg::init().unwrap();
-                log::info!("{:?}", path);
+            log::info!("{:?}", path);
 
-                // --- read the file from the path
-                let mut input = ffmpeg::format::input(&path)?;
-                let video_stream = input
-                    .streams()
-                    .best(ffmpeg::util::media::Type::Video)
-                    .ok_or(ffmpeg::Error::StreamNotFound)?;
+            let input_context = ffmpeg::format::input(&path)?;
 
-                let video_stream_index = video_stream.index();
+            let video_stream = input_context
+                .streams()
+                .best(ffmpeg::util::media::Type::Video)
+                .ok_or(ffmpeg::Error::StreamNotFound)?;
 
-                let decoder_context =
-                    ffmpeg::codec::Context::from_parameters(video_stream.parameters())?;
-                // --- ffmpeg::codec::decoder::video::Video
-                let mut packet_decoder = decoder_context.decoder().video()?;
+            let time_base = video_stream.time_base().numerator() as f64
+                / video_stream.time_base().denominator() as f64;
 
-                let mut scaler = ffmpeg::software::scaling::Context::get(
-                    packet_decoder.format(),
-                    packet_decoder.width(),
-                    packet_decoder.height(),
-                    ffmpeg::format::Pixel::RGBA,
-                    packet_decoder.width(),
-                    packet_decoder.height(),
-                    ffmpeg::software::scaling::Flags::BILINEAR,
-                )?;
+            let duration_ms = (video_stream.duration() as f64 * time_base * 1000.) as i64;
 
-                let mut frame_idx = 0usize;
+            let frame_rate = (video_stream.avg_frame_rate().numerator() as f64)
+                / video_stream.avg_frame_rate().denominator() as f64;
 
-                let mut receive_decoded_frame =
-                    |p_dec: &mut ffmpeg::codec::decoder::video::Video| {
-                        let mut decoded = ffmpeg::util::frame::Video::empty();
-                        if p_dec.receive_frame(&mut decoded).is_ok() {
-                            // --- the output frame
-                            let mut rgba_frame = ffmpeg::util::frame::Video::empty();
+            let decoder_context =
+                ffmpeg::codec::Context::from_parameters(video_stream.parameters())?;
 
-                            // --- No accelerated colorspace conversion found from yuv420p to rgba.
-                            scaler.run(&decoded, &mut rgba_frame)?;
+            let video_decoder = decoder_context.decoder().video()?;
 
-                            // --- register the rgba_fram to avoid vec allocations
-                            // --- but, inserting into BTreeMap is still expensive i guess
-                            video_data.lock().unwrap().insert(frame_idx, rgba_frame);
-
-                            frame_idx += 1;
-                        }
-
-                        Ok::<(), ffmpeg::Error>(())
-                    };
-
-                while let Some(Ok((stream, packet))) = input.packets().next() {
-                    if stream.index() == video_stream_index {
-                        packet_decoder.send_packet(&packet)?;
-                        receive_decoded_frame(&mut packet_decoder)?;
-                    }
-                }
-
-                packet_decoder.send_eof()?;
-                receive_decoded_frame(&mut packet_decoder)?;
-
-                Ok::<(), ffmpeg::Error>(())
-            });
-
-            Ok(Some(()))
+            Ok(Some(Self {
+                duration_ms,
+                time_base,
+                video_stream_index: video_stream.index(),
+                frame_rate,
+                video_decoder,
+                input_context,
+            }))
         } else {
             Ok(None)
         }
+    }
+
+    pub fn get_next_packet(&mut self) -> Option<(ffmpeg::Stream, ffmpeg::Packet)> {
+        self.input_context
+            .packets()
+            .next()
+            .filter(|iter_result| iter_result.is_ok())
+            .map(|p| p.unwrap())
     }
 }
