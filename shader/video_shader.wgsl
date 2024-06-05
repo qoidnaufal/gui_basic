@@ -18,14 +18,14 @@ var<uniform> uniforms: Uniforms;
 
 @vertex
 fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> VertexOutput {
-    let quad = array<vec2<f32>, 6>(
-        uniforms.rect.xy,
-        uniforms.rect.zy,
-        uniforms.rect.xw,
-        uniforms.rect.zy,
-        uniforms.rect.zw,
-        uniforms.rect.xw,
-    );
+    // let quad = array<vec2<f32>, 6>(
+    //     uniforms.rect.xy,
+    //     uniforms.rect.zy,
+    //     uniforms.rect.xw,
+    //     uniforms.rect.zy,
+    //     uniforms.rect.zw,
+    //     uniforms.rect.xw,
+    // );
 
     var out: VertexOutput;
     out.uv = vec2<f32>(0.0);

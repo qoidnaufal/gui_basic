@@ -3,3 +3,7 @@ Idk, i just want to find out how to build native media player using [Rust](https
 
 ### References:
 - [tutorial](https://sotrh.github.io/learn-wgpu/)
+
+### Todo
+- avoid expensive computation on creating texture from rgba_frame
+- find how to loop the render exclusively for the video texture

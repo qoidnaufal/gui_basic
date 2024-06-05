@@ -1,13 +1,4 @@
-pub mod buffer;
-pub mod media;
-pub mod texture;
-pub mod vertex_buffer;
-pub mod window_state;
-
-use media::video;
-// use media::video;
-use vertex_buffer::Vertex;
-
+use std::sync::{Arc, Mutex};
 use winit::{
     application::ApplicationHandler,
     event::{self, WindowEvent},
@@ -16,58 +7,24 @@ use winit::{
     window::{Window, WindowId},
 };
 
-#[repr(C)]
-pub struct Uniforms {
-    pub rect: [f32; 4],
-}
+pub mod media;
+pub mod texture;
+pub mod uniforms;
+pub mod vertex;
+pub mod window_state;
 
-// --- positions are counter-clockwise ordered
-// --- position & tex_coords works like this:
-//
-//    (0)------------------(3) --> index
-//     | [0, 0]      [1, 0] |
-//     |                |   |
-//     |                `--------> tex_coords
-//     |                    |
-//     |                    |
-//     |       (0, 0) -----------> center position
-//     |                    |
-//     |                    |
-//     |                    |
-//     |                    |
-//     | [0, 1]      [1, 1] |
-//    (1)------------------(2)
-
-#[rustfmt::skip]
-pub const RECT_VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.7, 0.7, 0.0], tex_coords: [0.0, 0.0] },
-    Vertex { position: [-0.7, -0.7, 0.0], tex_coords: [0.0, 1.0] },
-    Vertex { position: [0.7, -0.7, 0.0], tex_coords: [1.0, 1.0] },
-    Vertex { position: [0.7, 0.7, 0.0], tex_coords: [1.0, 0.0] },
-];
-
-#[rustfmt::skip]
-pub const RECT_INDICES: &[u16] = &[
-    0, 1, 2,
-    2, 3, 0
-];
-
-#[rustfmt::skip]
-pub const VID_UNIFORMS: Uniforms = Uniforms {
-    rect: [0.0, 0.0, 0.7, 0.7]
-};
+use media::{media_player, video};
 
 pub struct App<'a> {
     pub window_state: window_state::WindowState<'a>,
-    pub video_data: video::VideoStreamData,
+    pub media_player: media_player::MediaPlayer,
 }
 
-impl<'a> App<'a> {
-    // later on i can change the function's parameter to include event loop
-    pub fn new() -> Self {
+impl Default for App<'_> {
+    fn default() -> Self {
         Self {
-            window_state: window_state::WindowState::new(),
-            video_data: video::VideoStreamData::new(),
+            window_state: window_state::WindowState::default(),
+            media_player: media_player::MediaPlayer::default(),
         }
     }
 }
@@ -78,9 +35,13 @@ impl<'a> ApplicationHandler for App<'a> {
             .create_window(
                 Window::default_attributes()
                     .with_maximized(false)
+                    .with_inner_size(winit::dpi::PhysicalSize::new(3000, 1700))
+                    .with_min_inner_size(winit::dpi::PhysicalSize::new(888, 500))
                     .with_title("My Basic GUI"),
             )
             .unwrap();
+
+        log::info!("{:?}", window.inner_size());
 
         self.window_state.window = Some(window);
         let bg_color = &[0.824, 0.902, 0.698, 1.0];
@@ -93,24 +54,34 @@ impl<'a> ApplicationHandler for App<'a> {
                 log::info!("Close button was pressed, stopping...");
                 event_loop.exit();
             }
-            WindowEvent::RedrawRequested => match self.window_state.render(&self.video_data) {
-                Ok(_) => (),
-                Err(wgpu::SurfaceError::Lost) => {
-                    self.window_state.resize(self.window_state.size.unwrap())
+            WindowEvent::RedrawRequested => {
+                match self.window_state.render_window(&mut self.media_player) {
+                    Ok(_) => (),
+                    Err(wgpu::SurfaceError::Lost) => {
+                        self.window_state.resize(self.window_state.size.unwrap())
+                    }
+                    Err(wgpu::SurfaceError::OutOfMemory) => {
+                        event_loop.exit();
+                    }
+                    Err(err) => log::error!("Render Error: {:?}", err),
                 }
-                Err(wgpu::SurfaceError::OutOfMemory) => event_loop.exit(),
-                Err(err) => log::error!("{:?}", err),
-            },
+            }
             WindowEvent::Resized(physical_size) => {
                 self.window_state.resize(physical_size);
+                self.media_player.resize(physical_size);
+                self.window_state.window.as_ref().unwrap().request_redraw();
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 let new_width =
                     (self.window_state.size.unwrap().width as f64 * scale_factor) as u32;
                 let new_height =
                     (self.window_state.size.unwrap().height as f64 * scale_factor) as u32;
+
                 let new_size = winit::dpi::PhysicalSize::new(new_width, new_height);
+
                 self.window_state.resize(new_size);
+                self.media_player.resize(new_size);
+                self.window_state.window.as_ref().unwrap().request_redraw();
             }
             // ------------------------------------------------
             WindowEvent::KeyboardInput {
@@ -123,24 +94,21 @@ impl<'a> ApplicationHandler for App<'a> {
                 ..
             } => match key {
                 KeyCode::KeyO => {
-                    if let Ok(Some(_)) = self.video_data.open_video() {
-                        self.video_data.video_index = 0;
-                        self.window_state.window.as_ref().unwrap().request_redraw();
+                    if let Ok(Some(video_stream)) = video::VideoStream::open_video() {
+                        self.media_player.video_stream = Some(Arc::new(Mutex::new(video_stream)));
+                        let device = self.window_state.device.as_ref().unwrap();
+                        let queue = self.window_state.queue.as_ref().unwrap();
+                        let window = self.window_state.window.as_ref().unwrap();
+
+                        self.media_player
+                            .render_video(device, queue, window)
+                            .unwrap();
                     }
                 }
-                KeyCode::ArrowRight => {
-                    self.video_data.video_index += 1;
-                    if self
-                        .video_data
-                        .data
-                        .lock()
-                        .unwrap()
-                        .contains_key(&self.video_data.video_index)
-                    {
-                        self.window_state.window.as_ref().unwrap().request_redraw();
-                    } else {
-                        log::info!("Reached end...")
-                    }
+                KeyCode::KeyR => {
+                    self.media_player
+                        .resize(winit::dpi::PhysicalSize::new(1000, 1080));
+                    self.window_state.window.as_ref().unwrap().request_redraw();
                 }
                 _ => {
                     log::info!("pressed key: {:?}", key)
