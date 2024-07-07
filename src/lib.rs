@@ -1,31 +1,33 @@
-use std::sync::{Arc, Mutex};
 use winit::{
     application::ApplicationHandler,
-    event::{self, WindowEvent},
+    event::WindowEvent,
     event_loop::ActiveEventLoop,
-    keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
 
-pub mod media;
-pub mod texture;
-pub mod uniforms;
-pub mod vertex;
-pub mod window_state;
-
-use media::{media_player, video};
+mod pipeline;
+mod texture;
+mod uniforms;
+mod vertex;
+mod window_state;
 
 pub struct App<'a> {
+    pub bg_color: &'a [f64; 4],
     pub window_state: window_state::WindowState<'a>,
-    pub media_player: media_player::MediaPlayer,
 }
 
 impl Default for App<'_> {
     fn default() -> Self {
         Self {
+            bg_color: &[1., 1., 1., 1.],
             window_state: window_state::WindowState::default(),
-            media_player: media_player::MediaPlayer::default(),
         }
+    }
+}
+
+impl<'a> App<'a> {
+    pub fn set_bg_color(&mut self, input: &'a [f64; 4]) {
+        self.bg_color = input;
     }
 }
 
@@ -44,8 +46,8 @@ impl<'a> ApplicationHandler for App<'a> {
         log::info!("{:?}", window.inner_size());
 
         self.window_state.window = Some(window);
-        let bg_color = &[0.824, 0.902, 0.698, 1.0];
-        self.window_state.init(bg_color);
+
+        self.window_state.init(self.bg_color);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -54,21 +56,18 @@ impl<'a> ApplicationHandler for App<'a> {
                 log::info!("Close button was pressed, stopping...");
                 event_loop.exit();
             }
-            WindowEvent::RedrawRequested => {
-                match self.window_state.render_window(&mut self.media_player) {
-                    Ok(_) => (),
-                    Err(wgpu::SurfaceError::Lost) => {
-                        self.window_state.resize(self.window_state.size.unwrap())
-                    }
-                    Err(wgpu::SurfaceError::OutOfMemory) => {
-                        event_loop.exit();
-                    }
-                    Err(err) => log::error!("Render Error: {:?}", err),
+            WindowEvent::RedrawRequested => match self.window_state.render_window() {
+                Ok(_) => (),
+                Err(wgpu::SurfaceError::Lost) => {
+                    self.window_state.resize(self.window_state.size.unwrap())
                 }
-            }
+                Err(wgpu::SurfaceError::OutOfMemory) => {
+                    event_loop.exit();
+                }
+                Err(err) => log::error!("Render Error: {:?}", err),
+            },
             WindowEvent::Resized(physical_size) => {
                 self.window_state.resize(physical_size);
-                self.media_player.resize(physical_size);
                 self.window_state.window.as_ref().unwrap().request_redraw();
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
@@ -80,40 +79,9 @@ impl<'a> ApplicationHandler for App<'a> {
                 let new_size = winit::dpi::PhysicalSize::new(new_width, new_height);
 
                 self.window_state.resize(new_size);
-                self.media_player.resize(new_size);
                 self.window_state.window.as_ref().unwrap().request_redraw();
             }
             // ------------------------------------------------
-            WindowEvent::KeyboardInput {
-                event:
-                    event::KeyEvent {
-                        state: event::ElementState::Pressed,
-                        physical_key: PhysicalKey::Code(key),
-                        ..
-                    },
-                ..
-            } => match key {
-                KeyCode::KeyO => {
-                    if let Ok(Some(video_stream)) = video::VideoStream::open_video() {
-                        self.media_player.video_stream = Some(Arc::new(Mutex::new(video_stream)));
-                        let device = self.window_state.device.as_ref().unwrap();
-                        let queue = self.window_state.queue.as_ref().unwrap();
-                        let window = self.window_state.window.as_ref().unwrap();
-
-                        self.media_player
-                            .render_video(device, queue, window)
-                            .unwrap();
-                    }
-                }
-                KeyCode::KeyR => {
-                    self.media_player
-                        .resize(winit::dpi::PhysicalSize::new(1000, 1080));
-                    self.window_state.window.as_ref().unwrap().request_redraw();
-                }
-                _ => {
-                    log::info!("pressed key: {:?}", key)
-                }
-            },
             _ => (),
             // n => log::info!("{:?}", n),
         }

@@ -1,16 +1,18 @@
-use winit::window::Window;
+use crate::pipeline::Pipeline;
+use crate::texture::Texture;
+use crate::vertex::VertexBuffer;
 
-use crate::media::media_player;
+use winit::window::Window;
 
 pub struct WindowState<'a> {
     pub bg_color: &'a [f64; 4],
     pub window: Option<Window>,
     pub size: Option<winit::dpi::PhysicalSize<u32>>,
     // --- surface
-    pub surface: Option<wgpu::Surface<'a>>,
-    pub device: Option<wgpu::Device>,
-    pub queue: Option<wgpu::Queue>,
-    pub config: Option<wgpu::SurfaceConfiguration>,
+    surface: Option<wgpu::Surface<'a>>,
+    device: Option<wgpu::Device>,
+    queue: Option<wgpu::Queue>,
+    config: Option<wgpu::SurfaceConfiguration>,
 }
 
 impl Default for WindowState<'_> {
@@ -68,7 +70,7 @@ impl<'a> WindowState<'a> {
             let surface_format = surface_capabilities
                 .formats
                 .iter()
-                .find(|sf| sf.is_srgb())
+                .find(|tx_fmt| tx_fmt.is_srgb())
                 .copied()
                 .unwrap_or(surface_capabilities.formats[0]);
 
@@ -117,22 +119,19 @@ impl<'a> WindowState<'a> {
     }
 
     // --- this function render the whole window
-    pub fn render_window(
-        &mut self,
-        media_player: &mut media_player::MediaPlayer,
-    ) -> Result<(), wgpu::SurfaceError> {
-        if media_player.texture.as_ref().is_none() {
-            media_player
-                .create_texture(self.device.as_ref().unwrap(), self.queue.as_ref().unwrap())
-                .unwrap();
-        }
+    pub fn render_window(&mut self) -> Result<(), wgpu::SurfaceError> {
+        // vertex buffer
+        let buffer = VertexBuffer::init(self.device.as_ref().unwrap());
 
-        media_player.create_pipeline(
+        // texture
+        let texture = Texture::new(self.device.as_ref().unwrap(), self.queue.as_ref().unwrap());
+
+        // pipeline
+        let pipeline = Pipeline::new(
             self.device.as_ref().unwrap(),
-            self.config.as_ref().unwrap().format,
+            self.config.as_ref().unwrap(),
+            texture,
         );
-
-        let pipeline = media_player.pipeline.as_ref().unwrap();
 
         // output: SurfaceTexture
         let output = self.surface.as_ref().unwrap().get_current_texture()?;
@@ -169,20 +168,11 @@ impl<'a> WindowState<'a> {
                 timestamp_writes: None,
             });
 
-            // ---- the loop needs to happen here _.
-            //                                     |
-            //                                     v
             render_pass.set_pipeline(&pipeline.render_pipeline);
             render_pass.set_bind_group(0, &pipeline.bind_group, &[]);
-            render_pass.set_viewport(
-                media_player.uniforms().rect[0],
-                media_player.uniforms().rect[1],
-                media_player.uniforms().rect[2],
-                media_player.uniforms().rect[3],
-                0.0,
-                1.0,
-            );
-            render_pass.draw(0..4, 0..1);
+            render_pass.set_vertex_buffer(0, buffer.vertices.slice(..));
+            render_pass.set_index_buffer(buffer.index.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..buffer.num_indices, 0, 0..1);
         }
 
         self.queue
