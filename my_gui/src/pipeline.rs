@@ -1,8 +1,7 @@
 use crate::texture::Texture;
-use crate::vertex::create_buffer_layout;
+use crate::vertex::Vertex;
 
 pub struct Pipeline {
-    shader_module: wgpu::ShaderModule,
     pub render_pipeline: wgpu::RenderPipeline,
     pub bind_group: wgpu::BindGroup,
 }
@@ -14,7 +13,7 @@ impl Pipeline {
         texture: Texture,
     ) -> Self {
         let shader_module =
-            device.create_shader_module(wgpu::include_wgsl!("../shader/shader.wgsl"));
+            device.create_shader_module(wgpu::include_wgsl!("../shaders/shader.wgsl"));
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -67,7 +66,7 @@ impl Pipeline {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: "vs_main",
-                buffers: &[create_buffer_layout()],
+                buffers: &[Vertex::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -99,7 +98,6 @@ impl Pipeline {
         });
 
         Self {
-            shader_module,
             render_pipeline,
             bind_group,
         }

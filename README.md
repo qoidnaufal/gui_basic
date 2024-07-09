@@ -1,9 +1,8 @@
-# NATIVE MEDIA PLAYER
-Idk, i just want to find out how to build native media player using [Rust](https://www.rust-lang.org/), [Winit](https://docs.rs/winit/latest/winit/index.html), [Wgpu](https://docs.rs/wgpu/latest/wgpu/index.html) and [Ffmpeg](https://docs.rs/ffmpeg-the-third/latest/ffmpeg_the_third/index.html)
+# Basic GUI Toolkit
+Repurpose this project into learning to create my own GUI toolkit
 
-### References:
-- [tutorial](https://sotrh.github.io/learn-wgpu/)
-
-### Todo
-- avoid expensive computation on creating texture from rgba_frame
-- find how to loop the render exclusively for the video texture
+### References & Inspiration:
+- [WGPU tutorial](https://sotrh.github.io/learn-wgpu/)
+- [rust-wgpu-gui-example](https://github.com/zupzup/rust-wgpu-gui-example/tree/main)
+- [Leptos](https://github.com/leptos-rs/leptos)
+- [Ribir](https://github.com/RibirX/Ribir)

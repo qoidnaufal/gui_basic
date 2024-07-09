@@ -1,10 +1,11 @@
+use crate::elements::{button, IntoView};
 use crate::pipeline::Pipeline;
 use crate::texture::Texture;
 use crate::vertex::VertexBuffer;
 
 use winit::window::Window;
 
-pub struct WindowState<'a> {
+pub struct WindowContext<'a> {
     pub bg_color: &'a [f64; 4],
     pub window: Option<Window>,
     pub size: Option<winit::dpi::PhysicalSize<u32>>,
@@ -15,7 +16,7 @@ pub struct WindowState<'a> {
     config: Option<wgpu::SurfaceConfiguration>,
 }
 
-impl Default for WindowState<'_> {
+impl Default for WindowContext<'_> {
     fn default() -> Self {
         Self {
             bg_color: &[0.0, 0.0, 0.0, 1.0],
@@ -29,8 +30,16 @@ impl Default for WindowState<'_> {
     }
 }
 
-impl<'a> WindowState<'a> {
-    pub fn init(&mut self, bg_color: &'a [f64; 4]) {
+impl<'a> WindowContext<'a> {
+    pub fn set_window(&mut self, window: Window) {
+        self.window.replace(window);
+    }
+
+    pub fn set_bg_color(&mut self, bg_color: &'a [f64; 4]) {
+        self.bg_color = bg_color;
+    }
+
+    pub fn init(&mut self) {
         let window = self.window.as_ref().unwrap();
 
         let size = window.inner_size();
@@ -92,7 +101,6 @@ impl<'a> WindowState<'a> {
 
         // ------------------------------------------
 
-        self.bg_color = bg_color;
         self.device = Some(device);
         self.queue = Some(queue);
         self.config = Some(config);
@@ -120,11 +128,21 @@ impl<'a> WindowState<'a> {
 
     // --- this function render the whole window
     pub fn render_window(&mut self) -> Result<(), wgpu::SurfaceError> {
-        // vertex buffer
-        let buffer = VertexBuffer::init(self.device.as_ref().unwrap());
+        // button
+        let button = button([10, 10, 50, 120], [0.235, 0.639, 0.282, 1.]);
 
-        // texture
-        let texture = Texture::new(self.device.as_ref().unwrap(), self.queue.as_ref().unwrap());
+        // vertices
+        let vertices = button.vertices(self.size.as_ref().unwrap());
+
+        // vertex buffer
+        let buffer = VertexBuffer::new(self.device.as_ref().unwrap(), vertices);
+
+        // texture should be specific to each element
+        let texture = Texture::new(
+            self.device.as_ref().unwrap(),
+            self.queue.as_ref().unwrap(),
+            button,
+        );
 
         // pipeline
         let pipeline = Pipeline::new(
@@ -168,11 +186,11 @@ impl<'a> WindowState<'a> {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&pipeline.render_pipeline);
-            render_pass.set_bind_group(0, &pipeline.bind_group, &[]);
-            render_pass.set_vertex_buffer(0, buffer.vertices.slice(..));
-            render_pass.set_index_buffer(buffer.index.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..buffer.num_indices, 0, 0..1);
+            render_pass.set_pipeline(&pipeline.render_pipeline); // pipeline -> button
+            render_pass.set_bind_group(0, &pipeline.bind_group, &[]); // pipeline -> button
+            render_pass.set_vertex_buffer(0, buffer.vertices.slice(..)); // buffer -> button
+            render_pass.set_index_buffer(buffer.index.slice(..), wgpu::IndexFormat::Uint16); // buffer -> button
+            render_pass.draw_indexed(0..buffer.num_indices, 0, 0..1); // buffer -> button
         }
 
         self.queue

@@ -1,0 +1,14 @@
+[package]
+name = "my_gui"
+version = { workspace = true }
+edition = { workspace = true }
+authors = ["Qoid Naufal"]
+
+[dependencies]
+anyhow = "1.0.86"
+bytemuck = { version = "1.16.0", features = ["derive"] }
+env_logger = "0.11.3"
+futures = "0.3.30"
+log = "0.4.21"
+wgpu = "0.20.0"
+winit = "0.30.0"

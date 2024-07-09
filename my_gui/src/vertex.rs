@@ -19,17 +19,9 @@ use wgpu::util::DeviceExt;
 //    (1)---------------------------(2)
 
 #[rustfmt::skip]
-const RECT_VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.7,  0.7, 0.0], tex_coords: [0.0, 0.0] },
-    Vertex { position: [-0.7, -0.7, 0.0], tex_coords: [0.0, 1.0] },
-    Vertex { position: [ 0.7, -0.7, 0.0], tex_coords: [1.0, 1.0] },
-    Vertex { position: [ 0.7,  0.7, 0.0], tex_coords: [1.0, 0.0] },
-];
-
-#[rustfmt::skip]
 const RECT_INDICES: &[u16] = &[
     0, 1, 2,
-    2, 3, 0
+    0, 2, 3
 ];
 
 #[repr(C)]
@@ -39,23 +31,25 @@ pub struct Vertex {
     pub tex_coords: [f32; 2],
 }
 
-pub fn create_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
-    use std::mem;
-    wgpu::VertexBufferLayout {
-        array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
-        step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &[
-            wgpu::VertexAttribute {
-                offset: 0,
-                shader_location: 0,
-                format: wgpu::VertexFormat::Float32x3,
-            },
-            wgpu::VertexAttribute {
-                offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                shader_location: 1,
-                format: wgpu::VertexFormat::Float32x2,
-            },
-        ],
+impl Vertex {
+    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+            ],
+        }
     }
 }
 
@@ -66,10 +60,10 @@ pub struct VertexBuffer {
 }
 
 impl VertexBuffer {
-    pub fn init(device: &wgpu::Device) -> Self {
+    pub fn new(device: &wgpu::Device, vertices: [Vertex; 4]) -> Self {
         let vertices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(RECT_VERTICES),
+            contents: bytemuck::cast_slice(&vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 

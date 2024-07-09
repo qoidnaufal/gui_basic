@@ -1,16 +1,12 @@
-[package]
-name = "gui_basic"
+[workspace]
+resolver = "2"
+members = ["my_gui"]
+
+exclude = ["examples"]
+
+[workspace.package]
 version = "0.0.0"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib", "rlib"]
-
-[dependencies]
-anyhow = "1.0.86"
-bytemuck = { version = "1.16.0", features = ["derive"] }
-env_logger = "0.11.3"
-futures = "0.3.30"
-log = "0.4.21"
-wgpu = "0.20.0"
-winit = "0.30.0"
+[workspace.dependencies]
+my_gui = { path = "./my_gui" }
