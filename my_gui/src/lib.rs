@@ -1,3 +1,11 @@
+mod elements;
+mod vertex;
+mod view;
+mod window;
+
+pub use elements::button;
+pub use view::{IntoView, View};
+
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -5,19 +13,12 @@ use winit::{
     window::{Window, WindowId},
 };
 
-mod elements;
-mod pipeline;
-mod texture;
-mod vertex;
-mod window;
-
-pub use elements::{button, IntoView};
-
 pub struct App<'a> {
     bg_color: &'a [f64; 4],
     window: window::WindowContext<'a>,
     title: &'a str,
     window_size: winit::dpi::PhysicalSize<u32>,
+    components: Vec<View>,
 }
 
 impl Default for App<'_> {
@@ -27,6 +28,7 @@ impl Default for App<'_> {
             window: window::WindowContext::default(),
             title: "My Basic GUI",
             window_size: winit::dpi::PhysicalSize::new(800, 600),
+            components: vec![],
         }
     }
 }
@@ -42,6 +44,10 @@ impl<'a> App<'a> {
 
     pub fn set_window_size(&mut self, width: u32, height: u32) {
         self.window_size = winit::dpi::PhysicalSize::new(width, height);
+    }
+
+    pub fn add_components(&mut self, component: impl IntoView + 'static) {
+        self.components.push(component.into_view())
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -76,7 +82,7 @@ impl<'a> ApplicationHandler for App<'a> {
                 log::info!("Close button was pressed, stopping...");
                 event_loop.exit();
             }
-            WindowEvent::RedrawRequested => match self.window.render_window() {
+            WindowEvent::RedrawRequested => match self.window.render(&self.components) {
                 Ok(_) => (),
                 Err(wgpu::SurfaceError::Lost) => self.window.resize(self.window.size.unwrap()),
                 Err(wgpu::SurfaceError::OutOfMemory) => {

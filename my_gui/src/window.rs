@@ -1,7 +1,7 @@
-use crate::elements::{button, IntoView};
-use crate::pipeline::Pipeline;
-use crate::texture::Texture;
-use crate::vertex::VertexBuffer;
+use crate::{
+    view::{index_buffer, render_pipeline, vertex_buffer},
+    View,
+};
 
 use winit::window::Window;
 
@@ -118,38 +118,99 @@ impl<'a> WindowContext<'a> {
                 c.height = new_size.height;
             };
             if let Some(s) = self.surface.as_mut() {
-                s.configure(
-                    &self.device.as_ref().unwrap(),
-                    &self.config.as_ref().unwrap(),
-                )
+                s.configure(self.device.as_ref().unwrap(), self.config.as_ref().unwrap())
             };
         }
     }
 
     // --- this function render the whole window
-    pub fn render_window(&mut self) -> Result<(), wgpu::SurfaceError> {
-        // button
-        let button = button([10, 10, 50, 120], [0.235, 0.639, 0.282, 1.]);
+    pub fn render(&mut self, components: &Vec<View>) -> Result<(), wgpu::SurfaceError> {
+        let mut vertex_buf = Vec::new();
+        let mut index_buf = Vec::new();
+        let mut texture_view_array = Vec::new();
+        let mut sampler_array = Vec::new();
+        // let mut rgba = Vec::new();
 
-        // vertices
-        let vertices = button.vertices(self.size.as_ref().unwrap());
+        let mut num_vertices = 0;
+        let mut num_indices = 0;
 
-        // vertex buffer
-        let buffer = VertexBuffer::new(self.device.as_ref().unwrap(), vertices);
+        for component in components {
+            let vertices = component.vertices(self.size.as_ref().unwrap());
+            vertex_buf.extend_from_slice(vertices.as_slice());
 
-        // texture should be specific to each element
-        let texture = Texture::new(
-            self.device.as_ref().unwrap(),
-            self.queue.as_ref().unwrap(),
-            button,
+            let indices = component.indices(num_vertices);
+            index_buf.extend_from_slice(indices.as_slice());
+
+            num_vertices += vertices.len() as u32;
+            num_indices += component.num_indices();
+
+            let tv =
+                component.tex_view(self.device.as_ref().unwrap(), self.queue.as_ref().unwrap());
+            texture_view_array.push(tv);
+
+            let s = component.sampler(self.device.as_ref().unwrap());
+            sampler_array.push(s);
+
+            // let color = component.rgba();
+            // rgba.extend_from_slice(color.as_slice());
+        }
+
+        let bind_group_layout = self.device.as_ref().unwrap().create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
+                label: Some("Bind Group Layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            },
         );
 
-        // pipeline
-        let pipeline = Pipeline::new(
+        let bind_group =
+            self.device
+                .as_ref()
+                .unwrap()
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("Bind Group"),
+                    layout: &bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureViewArray(
+                                texture_view_array.iter().collect::<Vec<_>>().as_slice(),
+                            ),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::SamplerArray(
+                                sampler_array.iter().collect::<Vec<_>>().as_slice(),
+                            ),
+                        },
+                    ],
+                });
+
+        let pipeline = render_pipeline(
             self.device.as_ref().unwrap(),
             self.config.as_ref().unwrap(),
-            texture,
+            &bind_group_layout,
         );
+
+        // vertex buffer
+        let vertex_buffer = vertex_buffer(self.device.as_ref().unwrap(), vertex_buf);
+        let index_buffer = index_buffer(self.device.as_ref().unwrap(), index_buf);
 
         // output: SurfaceTexture
         let output = self.surface.as_ref().unwrap().get_current_texture()?;
@@ -186,11 +247,11 @@ impl<'a> WindowContext<'a> {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&pipeline.render_pipeline); // pipeline -> button
-            render_pass.set_bind_group(0, &pipeline.bind_group, &[]); // pipeline -> button
-            render_pass.set_vertex_buffer(0, buffer.vertices.slice(..)); // buffer -> button
-            render_pass.set_index_buffer(buffer.index.slice(..), wgpu::IndexFormat::Uint16); // buffer -> button
-            render_pass.draw_indexed(0..buffer.num_indices, 0, 0..1); // buffer -> button
+            render_pass.set_pipeline(&pipeline); // pipeline -> button
+            render_pass.set_bind_group(0, &bind_group, &[]); // pipeline -> button
+            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..)); // buffer -> button
+            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16); // buffer -> button
+            render_pass.draw_indexed(0..num_indices, 0, 0..1); // buffer -> button
         }
 
         self.queue

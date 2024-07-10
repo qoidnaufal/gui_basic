@@ -1,5 +1,4 @@
 use bytemuck::{Pod, Zeroable};
-use wgpu::util::DeviceExt;
 
 // --- positions are counter-clockwise ordered
 // --- position & tex_coords works like this:
@@ -17,12 +16,6 @@ use wgpu::util::DeviceExt;
 //     |                             |
 //     | [0.0, 1.0]       [1.0, 1.0] |
 //    (1)---------------------------(2)
-
-#[rustfmt::skip]
-const RECT_INDICES: &[u16] = &[
-    0, 1, 2,
-    0, 2, 3
-];
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
@@ -49,36 +42,6 @@ impl Vertex {
                     format: wgpu::VertexFormat::Float32x2,
                 },
             ],
-        }
-    }
-}
-
-pub struct VertexBuffer {
-    pub vertices: wgpu::Buffer,
-    pub index: wgpu::Buffer,
-    pub num_indices: u32,
-}
-
-impl VertexBuffer {
-    pub fn new(device: &wgpu::Device, vertices: [Vertex; 4]) -> Self {
-        let vertices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let index = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(RECT_INDICES),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        let num_indices = RECT_INDICES.len() as u32;
-
-        Self {
-            vertices,
-            index,
-            num_indices,
         }
     }
 }

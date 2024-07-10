@@ -1,27 +1,37 @@
-use crate::vertex::Vertex;
-
 mod button;
 
-use button::Button;
+pub use button::Button;
 
-pub fn button(position: [u32; 4], color: [f32; 4]) -> Button {
-    Button::new(position, color)
+use crate::vertex::Vertex;
+
+pub fn button() -> Button {
+    Button::default()
 }
 
-pub trait IntoView {
-    fn new(position: [u32; 4], color: [f32; 4]) -> Self;
-
+pub trait IntoElement {
     fn color(&self) -> [f32; 4];
 
     fn vertices(&self, size: &winit::dpi::PhysicalSize<u32>) -> [Vertex; 4];
 
-    fn texture(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::Texture {
-        let dimensions = (1u32, 1u32);
-        let rgba = self
-            .color()
+    #[rustfmt::skip]
+    fn indices(&self, base: u32) -> [u32; 6] {
+        [
+            base, 1 + base, 2 + base,
+            base, 2 + base, 3 + base
+        ]
+    }
+
+    fn rgba(&self) -> Vec<u8> {
+        self.color()
             .iter()
             .map(|i| (*i * 255.) as u8)
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+    }
+
+    fn texture_view(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::TextureView {
+        let dimensions = (1u32, 1u32); // unicolored shape
+
+        let rgba = self.rgba();
 
         let size = wgpu::Extent3d {
             width: dimensions.0,
@@ -40,7 +50,9 @@ pub trait IntoView {
             view_formats: &[],
         });
 
-        // ----- is this the correct place to do write_texture?
+        // something sus is happening here
+        // my guess is, this thing needs to be called only once
+        // but then, how do i define the multiple texture?
 
         queue.write_texture(
             wgpu::ImageCopyTexture {
@@ -58,6 +70,18 @@ pub trait IntoView {
             size,
         );
 
-        texture
+        texture.create_view(&wgpu::TextureViewDescriptor::default())
+    }
+
+    fn sampler(&self, device: &wgpu::Device) -> wgpu::Sampler {
+        device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        })
     }
 }
